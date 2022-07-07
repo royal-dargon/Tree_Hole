@@ -1,19 +1,37 @@
 import requests
-import re
-import json
-import lxml
+from pyquery import PyQuery as pq
+import openpyxl as op
+import urllib
+import datetime
+import time
 
 base_url = "https://m.weibo.cn/api/container/getIndex?containerid=100808bf27711bf93d6da034ece4fac96b8b40&luicode"\
         "=10000011&lfid=100103type%3D1%26q%3D%E6%A0%91%E6%B4%9E&since_id="
 
 
+# download the pictures
+def download_pic(pic_url, pic_id):
+    pic_path = "img" + '\\'
+    f = open(pic_path + str(pic_id) + ".jpg", 'wb')
+    f.write((urllib.request.urlopen(pic_url)).read())
+    f.close()
+    time.sleep(0.1)  # 下载间隙
+
+
 def main():
+    start_time = time.time()
+    wb = op.load_workbook("test.xlsx")
+    # 创建子表
+    ws = wb['info']
     requests.packages.urllib3.disable_warnings()
     url = "https://m.weibo.cn/api/container/getIndex?containerid=100808bf27711bf93d6da034ece4fac96b8b40&luicode" \
           "=10000011&lfid=100103type%3D1%26q%3D%E6%A0%91%E6%B4%9E"
     # 设置需要爬取的页数
-    n = 20
+    n = 100
     count = 0
+    img_count = 0
+    # 创建表头
+    ws.append(['id', 'time', 'text', 'uid', 'uname', 'description', 'location'])
     for i in range(n):
         result = requests.get(url, verify=False)
         if result.status_code != 200:
@@ -32,31 +50,27 @@ def main():
                     if "mblog" in text.keys():
                         text = text.get('mblog')
                         create_time = text.get('created_at')
-                        blog_texts = text.get('text')
-                        pattern = re.compile("[\u4e00-\u9fa5]+")
-                        blog_text = re.findall(pattern, blog_texts)
+                        blog_text = pq(text.get("text")).text()
                         user = text.get('user')
                         user_id = user.get('id')
                         name = user.get('screen_name')
                         description = user.get('description')
                         location = text.get('region_name')
-                        new_text = ""
-                        for k in range(len(blog_text)):
-                            if len(blog_text[k]) <= 1:
-                                continue
-                            if k != 0:
-                                new_text += str(blog_text[k])
-                                if k < len(blog_text)-1:
-                                    new_text += ","
-                                else:
-                                    new_text += "。"
-                            else:
-                                if blog_text[k] != "树洞":
-                                    new_text += str(blog_text[k])
-                        blog_info = [create_time, new_text, user_id, name, description, location]
-                        print(blog_info)
+                        pics = text.get('pics')
+                        if pics:
+                            for pic in pics:
+                                pic_url = pic.get('large').get('url')
+                                download_pic(pic_url, count)
+                        # if len(img) != 0:
+                        #     img_count += 1
+                        blog_info = [count+1, create_time, blog_text, user_id, name, description, location]
+                        ws.append(blog_info)
                         count += 1
+    wb.save("test.xlsx")
+    end_time = time.time()
+    act_time = end_time - start_time
     print("共爬取了%d条博客" % count)
+    print("程序运行的时间为%d" % act_time)
 
 
 if __name__ == "__main__":
