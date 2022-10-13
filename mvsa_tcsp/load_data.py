@@ -1,7 +1,5 @@
-import pandas as pd
 import os
-import cv2
-import numpy as np
+from PIL import Image
 
 
 def load_mvsa_single():
@@ -16,10 +14,14 @@ def load_mvsa_single():
         if file.endswith("txt"):
             f = open(filepath + "/" + file, encoding='unicode_escape')
             lines = f.readlines()   # 确定一共是4869条数据
-            text_rows.append(lines)
+            s = ""
+            for line in lines:
+                line = line.strip('\n')
+                s += line
+            text_rows.append(s)
         elif file.endswith("jpg"):
             # three loads [length, width, 3]
-            i = cv2.imread(filepath + "/" + file)
+            i = Image.open(filepath + "/" + file)
             image_rows.append(i)
     f = open(label_path)
     lines = f.readlines()

@@ -1,8 +1,10 @@
+import numpy as np
 from transformers import BertTokenizer, BertModel
 import torch
 import torch.nn as nn
 import torchvision
 from torchvision import transforms
+import sklearn.preprocessing as sp
 
 bert_en_model = "../pre_model/pretrained_berts/bert_en"
 tokenizer = BertTokenizer.from_pretrained(bert_en_model)
@@ -35,9 +37,6 @@ vocab = Vocab("../pre_model/pretrained_berts/bert_en/vocab.txt")
 
 
 def text2features(text_rows):
-    print(len(text_rows))
-    # data_id = []
-    # attention_masks = []
     text_features = []
     for row in text_rows:
         inputs_id = tokenizer.encode(
@@ -51,9 +50,10 @@ def text2features(text_rows):
         mask = [1 if t != 0 else 0 for t in inputs_id[0, :].tolist()]
         mask = torch.tensor(mask).reshape([1, -1])
         out_put = model(inputs_id, attention_mask=mask)
-        text_features.append(out_put[0])
+        out_put = torch.squeeze(out_put[0], 0)
+        text_features.append(out_put.detach().numpy())
         # print(out_put[0].shape, out_put[1].shape)
-    return text_features
+    return np.array(text_features)
 
 
 class Images2Features(nn.Module):
@@ -74,15 +74,31 @@ def image2features(images_rows):
     net = Images2Features()
     net.eval()
     process = transforms.Compose([
-        transforms.Resize([224, 224]),
-        # transforms.CenterCrop(),
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225])
     ])
-    img_t = process(images_rows[0])
-    batch_t = torch.unsqueeze(img_t, 0)
-    res = net(batch_t)
-    print(res.shape)
+    res = []
+    for row in images_rows:
+        img_t = process(row)
+        batch_t = torch.unsqueeze(img_t, 0)
+        feat = net(batch_t)
+        feat = torch.squeeze(feat, 0)
+        res.append(feat.detach().numpy())
+    return np.array(res)
+
+
+label_name = ['neutral', 'negative', 'positive']
+
+
+def label2features(label_rows):
+    res = []
+    for label in label_rows:
+        label_id = torch.tensor([label_name.index(label)], dtype=torch.long)
+        res.append(label_id)
     return res
+
+
