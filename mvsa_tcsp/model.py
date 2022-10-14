@@ -26,6 +26,7 @@ class TextModel(nn.Module):
         output, (_, _) = self.lstm(x, (h, c))
         # 使用batch_first后输出的变成[batch, length, hidden]
         out = output[:, -1, :].squeeze(0)
+        # 准备添加自注意力
         out = self.fc1(out)
         out = self.softmax(out)
         return out
