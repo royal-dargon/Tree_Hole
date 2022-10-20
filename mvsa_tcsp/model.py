@@ -113,5 +113,35 @@ class Translation(nn.Module):
         return all_dec_out.permute(1, 0, 2).contiguous(), all_attn_weights.permute(2, 0, 1).contiguous()
 
     def forward(self, source, target, lengths):
-        pass
+        batch_size, enc_n, _ = source.size()
+        source = source.permute(1, 0, 2).contiguous()  # (enc_n, b, *)
+        target = target.permute(1, 0, 2).contiguous()  # (dec_n, b, *)
 
+        # encode
+        enc_hs = self.encode(source, lengths).permute(1, 2, 0).contiguous()
+
+        # batch normalize
+        try:
+            enc_hs = self.bn(enc_hs).permute(2, 0, 1).contiguous()
+        except:
+            enc_hs = enc_hs.permute(2, 0, 1).contiguous()
+
+        # get mask for attention
+        seq_range = torch.arange(0, enc_n).long().to(source.device)
+        seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, enc_n)
+        seq_length_expand = lengths.unsqueeze(1).expand_as(seq_range_expand).long()
+        before_mask = (seq_range_expand < seq_length_expand).unsqueeze(1).expand(batch_size, 1, enc_n).float()
+        before_mask = before_mask.permute(1, 2, 0).contiguous()
+        attn_mask = (seq_range_expand < seq_length_expand).unsqueeze(1).expand(batch_size, enc_n, enc_n).contiguous()
+        tgt_mask = (seq_range_expand < seq_length_expand).unsqueeze(2).expand(batch_size, enc_n,
+                                                                              target.size(2)).contiguous()
+
+        # decode
+        all_dec_out, all_attn_weights = self.decode(source, target, enc_hs, before_mask)
+
+        # masked
+        all_dec_out = all_dec_out.masked_fill(~tgt_mask, 0.0)
+        all_attn_weights = all_attn_weights.masked_fill(~attn_mask, 1e-10)
+        all_attn_weights = all_attn_weights.masked_fill(~attn_mask.transpose(1, 2), 1e-10)
+
+        return all_dec_out, all_attn_weights
