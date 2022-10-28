@@ -132,22 +132,38 @@ def divide_data(row_data, batch_size, data_length):
 
 
 def text2id(rows):
-    input_id = tokenizer.encode(
-        rows,
-        add_special_tokens=True,
-        max_length=100,
-        padding='max_length',
-        return_tensors='pt'
-    )
-    mask = [1 if t != 0 else 0 for t in input_id[0, :].tolist()]
-    mask = torch.tensor(mask).reshape([1, -1])
-    text_id = [input_id, mask]
+    input_ids, masks = [], []
+    for r in rows:
+        input_id = tokenizer.encode(
+            r,
+            add_special_tokens=True,
+            max_length=100,
+            padding='max_length',
+            return_tensors='pt'
+        )
+        mask = [1 if t != 0 else 0 for t in input_id[0, :].tolist()]
+        # mask = torch.tensor(mask).reshape([1, -1])
+        input_ids.append(input_id)
+        masks.append(mask)
+
+    input_ids = [item.tolist() for item in input_ids]
+    input_ids = torch.tensor(input_ids)
+    input_ids = torch.squeeze(input_ids, dim=1)
+    masks = torch.tensor(masks)
+    text_id = [input_ids, masks]
     return text_id
 
 
-def label2features(label):
-    label_id = torch.tensor([label_name.index(label)], dtype=torch.long)
-    return label_id
+def label2features(labels):
+    label_ids = []
+    for label in labels:
+        label_id = torch.zeros([3])
+        # label_id = torch.tensor([label_name.index(label)], dtype=torch.long)
+        label_id[label_name.index(label)] = 1
+        label_ids.append(label_id)
+    label_ids = [item.tolist() for item in label_ids]
+    label_ids = torch.tensor(label_ids, dtype=torch.float)
+    return label_ids
 
 
 if __name__ == "__main__":
@@ -170,19 +186,19 @@ if __name__ == "__main__":
     for i in range(epoch):
         # 注意一下标签的序号
         j = 0
-        for row in data["text"][:10]:
+        for row in res_data["train"]["text"][:10]:
             text_optim.zero_grad()
             text = text2id(row)
             out = TextModel(text)
-            out = torch.unsqueeze(out, dim=0)
-            text_label = data["text_labels"][j]
+            text_label = res_data["train"]["text_label"][j]
             j += 1
             y = label2features(text_label)
             loss = loss_func_text(out, y)
             loss.backward()
             text_optim.step()
-            if j % 10 == 0:
-                print(loss, out)
+            if j % 20 == 0:
+                print(loss)
+
     # 保存模型的参数
     torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
 

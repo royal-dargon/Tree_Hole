@@ -20,13 +20,13 @@ class Text2Features(nn.Module):
         self.Q_linear = nn.Linear(in_features=text_hidden_size*2, out_features=text_hidden_size*2, bias=False)
         self.K_linear = nn.Linear(in_features=text_hidden_size*2, out_features=text_hidden_size*2, bias=False)
         self.V_linear = nn.Linear(in_features=text_hidden_size*2, out_features=text_hidden_size*2, bias=False)
-        self.softmax = nn.Softmax(dim=1)
+        self.softmax = nn.Softmax(dim=2)
 
         self.gru_2 = nn.GRU(input_size=text_hidden_size*2, hidden_size=text_hidden_size_2, batch_first=True,
                             dropout=0.5, num_layers=2, bidirectional=False)
         # 多层全连接
         self.linear_1 = nn.Linear(in_features=text_hidden_size_2, out_features=3)
-        self.softmax_mlp = nn.Softmax(dim=0)
+        self.softmax_mlp = nn.Softmax(dim=1)
 
     def forward(self, x):
         """
@@ -37,19 +37,19 @@ class Text2Features(nn.Module):
         mask = x[1]
 
         encoder, pooled = self.bert(context, attention_mask=mask, return_dict=False)
-        encoder = torch.squeeze(encoder[0], 0)
-        out, _ = self.gru(encoder)
+        # encoder = torch.squeeze(encoder[0], 0)
+        out, _ = self.gru(encoder)      # (batch, len, hidden*2)
         q = self.Q_linear(out)
         k = self.K_linear(out)
         v = self.K_linear(out)
 
-        alpha = torch.matmul(q, k.T)    # (100, 100)
+        k = k.permute(0, 2, 1)
+        alpha = torch.matmul(q, k)    # (batch, 100, 100)
         alpha = self.softmax(alpha)
-        out = torch.matmul(alpha, v)    # (100, 2048)
-        out = torch.unsqueeze(out, dim=0)
-
+        out = torch.matmul(alpha, v)    # (batch, 100, 2048)
         _, h0 = self.gru_2(out)
-        out = torch.squeeze(h0[-1, :, :], dim=0)
+        h0 = h0.permute(1, 0, 2)
+        out = torch.squeeze(h0[:, -1, :], dim=1)
         out = self.linear_1(out)
         out = self.softmax_mlp(out)
 
