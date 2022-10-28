@@ -87,7 +87,7 @@ if __name__ == "__main__":
     data = get_single()
     # 将这些row的数据送入BERT与res-net进行特征的提取
     # text = text2id(data["text"])
-    epoch = 5
+    epoch = 10
     TextModel = model.Text2Features()
     text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-5)
     loss_func_text = nn.CrossEntropyLoss()
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     for i in range(epoch):
         # 注意一下标签的序号
         j = 0
-        for row in data["text"][:100]:
+        for row in data["text"][:2000]:
             text_optim.zero_grad()
             text = text2id(row)
             out = TextModel(text)
@@ -108,6 +108,8 @@ if __name__ == "__main__":
             text_optim.step()
             if j % 10 == 0:
                 print(loss, out)
+    # 保存模型的参数
+    torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
 
 
 
