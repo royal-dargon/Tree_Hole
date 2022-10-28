@@ -63,6 +63,74 @@ def get_single():
     return data_rows
 
 
+# train、test、val数据集划分(按照batch_size进行划分)
+def divide_data(row_data, batch_size, data_length):
+    r_data = {
+        "train": dict(),
+        "test": dict(),
+        "val":  dict()
+    }
+
+    # train data 0.7    3408
+    train_text, train_image, train_text_label, train_image_label = [], [], [], []
+    for index in range(0, int(data_length * 0.7), batch_size):
+        if index + batch_size >= int(data_length * 0.7):
+            word = row_data["text"][index:int(data_length * 0.7)]
+            image = row_data["image"][index:int(data_length * 0.7)]
+            word_label = row_data["text_labels"][index:int(data_length * 0.7)]
+            image_label = row_data["image_labels"][index:int(data_length * 0.7)]
+            train_text.append(word)
+            train_image.append(image)
+            train_text_label.append(word_label)
+            train_text_label.append(image_label)
+        else:
+            train_text.append(row_data["text"][index:index+batch_size])
+            train_image.append(row_data["image"][index:index + batch_size])
+            train_text_label.append(row_data["text_labels"][index:index + batch_size])
+            train_image_label.append(row_data["image_labels"][index:index + batch_size])
+    r_data["train"]["text"] = train_text
+    r_data["train"]["image"] = train_image
+    r_data["train"]["text_label"] = train_text_label
+    r_data["train"]["image_label"] = train_image_label
+
+    # test data 0.2     974
+    test_text, test_image, test_t_label, test_i_label = [], [], [], []
+    for index in range(int(data_length * 0.7), int(data_length * 0.9), batch_size):
+        if index + batch_size >= int(data_length * 0.9):
+            test_text.append(row_data["text"][index:int(data_length * 0.9)])
+            test_image.append(row_data["image"][index:int(data_length * 0.9)])
+            test_t_label.append(row_data["text_labels"][index:int(data_length * 0.9)])
+            test_i_label.append(row_data["image_labels"][index:int(data_length * 0.9)])
+        else:
+            test_text.append(row_data["text"][index:index + batch_size])
+            test_image.append(row_data["image"][index:index + batch_size])
+            test_t_label.append(row_data["text_labels"][index:index + batch_size])
+            test_i_label.append(row_data["image_labels"][index:index + batch_size])
+    r_data["test"]["text"] = test_text
+    r_data["test"]["image"] = test_image
+    r_data["test"]["text_label"] = test_t_label
+    r_data["test"]["image_label"] = test_i_label
+
+    # val data 0.1      487
+    val_text, val_image, val_text_label, val_image_label = [], [], [], []
+    for index in range(int(data_length * 0.9), data_length, batch_size):
+        if index + batch_size >= data_length:
+            val_text.append(row_data["text"][index:data_length])
+            val_image.append(row_data["image"][index:data_length])
+            val_text_label.append(row_data["text_labels"][index:data_length])
+            val_image_label.append(row_data["image_labels"][index:data_length])
+        else:
+            val_text.append(row_data["text"][index:index + batch_size])
+            val_image.append(row_data["image"][index:index + batch_size])
+            val_text_label.append(row_data["text_labels"][index:index + batch_size])
+            val_image_label.append(row_data["image_labels"][index:index + batch_size])
+    r_data["val"]["text"] = val_text
+    r_data["val"]["image"] = val_image
+    r_data["val"]["text_label"] = val_text_label
+    r_data["val"]["image_label"] = val_image_label
+    return r_data
+
+
 def text2id(rows):
     input_id = tokenizer.encode(
         rows,
@@ -85,9 +153,16 @@ def label2features(label):
 if __name__ == "__main__":
     # 获取文件夹的源数据
     data = get_single()
+    data_len = len(data["text"])
+    print(data_len)
+    res_data = divide_data(data, batch_size=24, data_length=data_len)
+    # temp = 0
+    # for da in res_data["val"]["text"]:
+    #     # print(len(da))
+    #     temp += len(da)
+    # print(temp)
     # 将这些row的数据送入BERT与res-net进行特征的提取
-    # text = text2id(data["text"])
-    epoch = 10
+    epoch = 1
     TextModel = model.Text2Features()
     text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-5)
     loss_func_text = nn.CrossEntropyLoss()
@@ -95,7 +170,7 @@ if __name__ == "__main__":
     for i in range(epoch):
         # 注意一下标签的序号
         j = 0
-        for row in data["text"][:2000]:
+        for row in data["text"][:10]:
             text_optim.zero_grad()
             text = text2id(row)
             out = TextModel(text)
