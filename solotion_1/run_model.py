@@ -1,3 +1,4 @@
+import time
 
 import torch
 import torch.nn as nn
@@ -17,8 +18,8 @@ if __name__ == "__main__":
     res_data = pre_data.divide_data(data, batch_size=64, data_length=data_len)
 
     # 确定是否使用gpu和一些其他的超参数
-    is_use_gpu = False
-    epoch = 1
+    is_use_gpu = True
+    epoch = 10
     print(device)
     TextModel = model.Text2Features(device, use_gpu=is_use_gpu)
     if is_use_gpu:
@@ -28,10 +29,11 @@ if __name__ == "__main__":
     # 文本模型的训练
     for i in range(epoch):
         # 注意一下标签的序号
+        start = time.time()
         j = 0
         losses = 0
         plot_losses = []
-        for row in res_data["train"]["text"][:5]:
+        for row in res_data["train"]["text"]:
             text_optim.zero_grad()
             text = pre_data.text2id(row)
             out = TextModel(text)
@@ -45,7 +47,8 @@ if __name__ == "__main__":
             text_optim.step()
             losses += loss
         plot_losses.append(losses / j)
-        print("the %d epoch losses is %f" % (i + 1, losses / j))
+        end = time.time()
+        print("the %d epoch losses is %f /t the time is %f s" % (i + 1, losses / j, (end - start)))
 
     # 保存模型的参数
     torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
