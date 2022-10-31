@@ -8,7 +8,7 @@ text_hidden_size_2 = 1024
 
 
 class Text2Features(nn.Module):
-    def __init__(self):
+    def __init__(self, device, use_gpu):
         super(Text2Features, self).__init__()
         self.bert = BertModel.from_pretrained("../pre_model/pretrained_berts/bert_en")          # 从存放的路径加载预训练模型
         for param in self.bert.parameters():
@@ -27,14 +27,20 @@ class Text2Features(nn.Module):
         # 多层全连接
         self.linear_1 = nn.Linear(in_features=text_hidden_size_2, out_features=3)
         self.softmax_mlp = nn.Softmax(dim=1)
+        self.device = device
+        self.use_gpu = use_gpu
 
     def forward(self, x):
         """
         :param x: [输入的token序列，mask序列]
         :return:
         """
-        context = x[0]
-        mask = x[1]
+        if self.use_gpu:
+            context = x[0].to(self.device)
+            mask = x[1].to(self.device)
+        else:
+            context = x[0]
+            mask = x[1]
 
         encoder, pooled = self.bert(context, attention_mask=mask, return_dict=False)
         # encoder = torch.squeeze(encoder[0], 0)

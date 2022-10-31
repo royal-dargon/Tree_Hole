@@ -4,13 +4,6 @@ import os
 from PIL import Image
 from transformers import BertTokenizer
 import torch
-import torch.nn as nn
-import torchvision
-from torchvision import transforms
-import numpy as np
-import torch.optim as optim
-
-import model
 
 
 bert_en_model = "../pre_model/pretrained_berts/bert_en"
@@ -138,14 +131,13 @@ def text2id(rows):
             r,
             add_special_tokens=True,
             max_length=100,
-            padding='max_length',
+            pad_to_max_length=True,
             return_tensors='pt'
         )
         mask = [1 if t != 0 else 0 for t in input_id[0, :].tolist()]
         # mask = torch.tensor(mask).reshape([1, -1])
         input_ids.append(input_id)
         masks.append(mask)
-
     input_ids = [item.tolist() for item in input_ids]
     input_ids = torch.tensor(input_ids)
     input_ids = torch.squeeze(input_ids, dim=1)
@@ -165,42 +157,6 @@ def label2features(labels):
     label_ids = torch.tensor(label_ids, dtype=torch.float)
     return label_ids
 
-
-if __name__ == "__main__":
-    # 获取文件夹的源数据
-    data = get_single()
-    data_len = len(data["text"])
-    print(data_len)
-    res_data = divide_data(data, batch_size=24, data_length=data_len)
-    # temp = 0
-    # for da in res_data["val"]["text"]:
-    #     # print(len(da))
-    #     temp += len(da)
-    # print(temp)
-    # 将这些row的数据送入BERT与res-net进行特征的提取
-    epoch = 1
-    TextModel = model.Text2Features()
-    text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-5)
-    loss_func_text = nn.CrossEntropyLoss()
-    # 文本模型的测试
-    for i in range(epoch):
-        # 注意一下标签的序号
-        j = 0
-        for row in res_data["train"]["text"][:10]:
-            text_optim.zero_grad()
-            text = text2id(row)
-            out = TextModel(text)
-            text_label = res_data["train"]["text_label"][j]
-            j += 1
-            y = label2features(text_label)
-            loss = loss_func_text(out, y)
-            loss.backward()
-            text_optim.step()
-            if j % 20 == 0:
-                print(loss)
-
-    # 保存模型的参数
-    torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
 
 
 
