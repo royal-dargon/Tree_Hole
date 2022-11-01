@@ -1,13 +1,53 @@
 import time
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from transformers import logging
 
 
 import model
 import pre_data
-from utils import cpu, device
+from utils import cpu, device, config
+
+logging.set_verbosity_warning()
+
+
+def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
+    """train the text model"""
+    tr_losses = []
+    val_losses = []
+    for epoch in tqdm(range(config["text_model"]["epoch"]), desc="training the text model ..."):
+        start = time.time()
+        j = 0
+        losses = 0
+        for row in tqdm(train_loader["text"]):
+            optimizer.zero_grad()
+            text = pre_data.text2id(row)
+            out = text_model(text)
+            out = out.to(cpu)
+            text_label = train_loader["text_label"][j]
+            j += 1
+            y = pre_data.label2features(text_label)
+            y = y.squeeze(1)
+            loss = loss_func(out, y)
+            loss.backward()
+            optimizer.step()
+            losses += loss
+        tr_losses.append(losses / j)
+        end = time.time()
+        print("the %d epoch train losses is %f the time is %f s" % (epoch + 1, losses / j, (end - start)))
+
+    # 保存模型的参数
+    torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
+
+
+def test_textmodel(test_loader, text_model):
+    """test the text model"""
+    pass
+
 
 if __name__ == "__main__":
     # 获取文件夹的源数据
@@ -19,37 +59,15 @@ if __name__ == "__main__":
 
     # 确定是否使用gpu和一些其他的超参数
     is_use_gpu = True
-    epoch = 10
     print(device)
     TextModel = model.Text2Features(device, use_gpu=is_use_gpu)
     if is_use_gpu:
         TextModel = TextModel.to(device)
     text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-5)
     loss_func_text = nn.CrossEntropyLoss()
-    # 文本模型的训练
-    for i in range(epoch):
-        # 注意一下标签的序号
-        start = time.time()
-        j = 0
-        losses = 0
-        plot_losses = []
-        for row in res_data["train"]["text"]:
-            text_optim.zero_grad()
-            text = pre_data.text2id(row)
-            out = TextModel(text)
-            out = out.to(cpu)
-            text_label = res_data["train"]["text_label"][j]
-            j += 1
-            y = pre_data.label2features(text_label)
-            y = y.squeeze(1)
-            loss = loss_func_text(out, y)
-            loss.backward()
-            text_optim.step()
-            losses += loss
-        plot_losses.append(losses / j)
-        end = time.time()
-        print("the %d epoch losses is %f /t the time is %f s" % (i + 1, losses / j, (end - start)))
+    # scheduler_text = ReduceLROnPlateau(text_optim, mode='min', patience=5, factor=0.1, verbose=True)
+    train_textmodel(train_loader=res_data["train"], val_loader=res_data["val"],
+                    text_model=TextModel, optimizer=text_optim, loss_func=loss_func_text)
 
-    # 保存模型的参数
-    torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
+
 
