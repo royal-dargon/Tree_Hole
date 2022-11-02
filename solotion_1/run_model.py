@@ -8,7 +8,7 @@ import torch.optim as optim
 
 import model
 import pre_data
-from utils import cpu, device, config, compute_acc
+from utils import cpu, device, config, compute_acc, cut_image
 
 
 def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
@@ -43,23 +43,24 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
         print("the %d epoch train losses is %f the time is %f s" % (epoch + 1, losses / train_size, (end - start)))
 
         losses = 0
-        with torch.no_grad():
-            for row in tqdm(val_loader["text"]):
-                batch_size = len(row)
-                val_size += batch_size
-                text = pre_data.text2id(row)
-                out = text_model(text)
-                out = out.to(cpu)
-                text_label = val_loader["text_label"][val_index]
-                val_index += 1
-                y = pre_data.label2features(text_label)
-                y = y.squeeze(1)
-                losses = loss_func(out, y)
-                acc_nums = compute_acc(out, y)
-                losses += loss.item() * batch_size
-            val_losses.append(losses / val_size)
-            val_acc.append(acc_nums/val_size)
-            print("the %d epoch val losses is %f the acc is %f" % (epoch + 1, losses/val_size, acc_nums/val_size))
+        acc_nums = 0
+        for row in tqdm(val_loader["text"]):
+            batch_size = len(row)
+            val_size += batch_size
+            text = pre_data.text2id(row)
+            out = text_model(text)
+            out = out.to(cpu)
+            text_label = val_loader["text_label"][val_index]
+            val_index += 1
+            y = pre_data.label2features(text_label)
+            y = y.squeeze(1)
+            loss = loss_func(out, y)
+            acc_num = compute_acc(out, y)
+            losses += loss.item() * batch_size
+            acc_nums += acc_num
+        val_losses.append(losses / val_size)
+        val_acc.append(acc_nums/val_size)
+        print("the %d epoch val losses is %f the acc is %f%%" % (epoch + 1, losses/val_size, acc_nums/val_size * 100))
 
     # 保存模型的参数
     torch.save(TextModel.state_dict(), './save/single/textmodel.pt')
@@ -68,6 +69,12 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
 def test_textmodel(test_loader, text_model):
     """test the text model"""
     pass
+
+
+def train_image_model(train_loader, val_loader, image_model, optimizer, loss_func):
+    """train the model about image"""
+    for row in train_loader["image"]:
+        res = cut_image(row)        # (batch_size, channels:3, 224, 224)
 
 
 if __name__ == "__main__":
@@ -81,14 +88,25 @@ if __name__ == "__main__":
     # 确定是否使用gpu和一些其他的超参数
     is_use_gpu = True
     print(device)
-    TextModel = model.Text2Features(device, use_gpu=is_use_gpu)
-    if is_use_gpu:
-        TextModel = TextModel.to(device)
-    text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-3)
-    loss_func_text = nn.CrossEntropyLoss()
-    # scheduler_text = ReduceLROnPlateau(text_optim, mode='min', patience=5, factor=0.1, verbose=True)
-    train_textmodel(train_loader=res_data["train"], val_loader=res_data["val"],
-                    text_model=TextModel, optimizer=text_optim, loss_func=loss_func_text)
+
+    if config["text_model"]["train"]:
+        TextModel = model.Text2Features(device, use_gpu=is_use_gpu)
+        if is_use_gpu:
+            TextModel = TextModel.to(device)
+        text_optim = optim.Adam([param for param in TextModel.parameters()], lr=1e-5)
+        loss_func_text = nn.CrossEntropyLoss()
+        # scheduler_text = ReduceLROnPlateau(text_optim, mode='min', patience=5, factor=0.1, verbose=True)
+        train_textmodel(train_loader=res_data["train"], val_loader=res_data["val"],
+                        text_model=TextModel, optimizer=text_optim, loss_func=loss_func_text)
+
+    if config["image_model"]["train"]:
+        ImageModel = model.Image2Features()
+        if is_use_gpu:
+            ImageModel = ImageModel.to(device)
+        # image_optim = optim.Adam([param for param in ImageModel.parameters()], lr=1e-5)
+        loss_func_image = nn.CrossEntropyLoss()
+        train_image_model(train_loader=res_data["train"], val_loader=res_data["val"],
+                          image_model=ImageModel, optimizer=0, loss_func=loss_func_image)
 
 
 
