@@ -77,6 +77,11 @@ def train_image_model(train_loader, val_loader, image_model, optimizer, loss_fun
         res = cut_image(row)        # (batch_size, channels:3, 224, 224)
 
 
+def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func):
+    """train the model about image and text """
+    pass
+
+
 if __name__ == "__main__":
     # 获取文件夹的源数据
     data = pre_data.get_single()
@@ -107,6 +112,12 @@ if __name__ == "__main__":
         loss_func_image = nn.CrossEntropyLoss()
         train_image_model(train_loader=res_data["train"], val_loader=res_data["val"],
                           image_model=ImageModel, optimizer=0, loss_func=loss_func_image)
+
+    if config["multi_model"]["train"]:
+        multi_model = model.MultiModel(is_use_gpu)
+        if is_use_gpu:
+            multi_model = multi_model.to(device)
+        loss_func_multi = nn.CrossEntropyLoss()
 
 
 

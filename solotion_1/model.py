@@ -84,3 +84,25 @@ class Image2Features(nn.Module):
         pass
 
 
+class MultiModel(nn.Module):
+    def __init__(self, is_gpu=True):
+        super(MultiModel, self).__init__()
+        self.is_gpu = is_gpu
+        self.bert = BertModel.from_pretrained("../pre_model/pretrained_berts/bert_cn")
+        for param in self.bert.parameters():
+            param.requires_grad = True
+        self.lstm = nn.LSTM(input_size=768, hidden_size=text_hidden_size,
+                            batch_first=True, num_layers=2, bidirectional=True)
+        self.image_model = torchvision.models.resnet152(pretrained=True)
+
+        def save_output(module, inputs, output):
+            self.buffer = output
+        self.image_model.layer4.register_forward_hook(save_output)
+
+    def forward(self, x):
+        if self.use_gpu:
+            context = x[0].to(self.device)
+            mask = x[1].to(self.device)
+        else:
+            context = x[0]
+            mask = x[1]
