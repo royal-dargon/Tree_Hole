@@ -79,7 +79,59 @@ def train_image_model(train_loader, val_loader, image_model, optimizer, loss_fun
 
 def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func):
     """train the model about image and text """
-    pass
+    train_losses, val_losses, acc = [], [], []
+    for epoch in tqdm(range(config["multi_model"]["epoch"]), desc="training the multi model ..."):
+        start = time.time()
+        train_index, val_index = 0, 0
+        train_size, val_size = 0, 0
+        losses = 0
+        for row in tqdm(train_loader["text"]):
+            batch_size = len(row)
+            train_size += batch_size
+            optimizer.zero_grad()
+            text = pre_data.text2id(row)
+            image = train_loader["image"][train_index]
+            image = torch.tensor([i.tolist() for i in image])
+            out = mul_model(text)
+            out = out.to(cpu)
+            text_label = train_loader["text_label"][train_index]
+            image_label = train_loader["image_label"][train_index]
+            train_index += 1
+            y = pre_data.label2features(text_label)
+            y = y.squeeze(1)
+            loss = loss_func(out, y)
+            loss.backward()
+            optimizer.step()
+            losses += loss.item() * batch_size
+        train_losses.append(losses / train_size)
+        end = time.time()
+        print("the %d epoch train losses is %f, the time is %f s" % (epoch + 1, losses/train_size, end - start))
+
+        losses = 0
+        acc_nums = 0
+        for row in tqdm(val_loader["text"]):
+            batch_size = len(row)
+            val_size += batch_size
+            text = pre_data.text2id(row)
+            image = val_loader["image"][val_index]
+            image = torch.tensor([i.tolist() for i in image])
+            out = mul_model(text)
+            out = out.to(cpu)
+            text_label, image_label = val_loader["text_label"][val_index], val_loader["image_label"][val_index]
+            val_index += 1
+            y = pre_data.label2features(text_label)
+            y = y.squeeze(1)
+            loss = loss_func(out, y)
+            acc_num = compute_acc(out, y)
+            losses += loss.item() * batch_size
+            acc_nums += acc_num
+        val_losses.append(losses / val_size)
+        acc.append(acc_nums / val_size)
+        print("the epoch %d val losses is %f the acc is %f%%" %
+              (epoch + 1, losses / val_size, acc_nums / val_size * 100))
+
+    # 保存模型
+    torch.save(mul_model.state_dict(), './save/single/multi_model.pt')
 
 
 if __name__ == "__main__":
@@ -91,7 +143,7 @@ if __name__ == "__main__":
     res_data = pre_data.divide_data(data, batch_size=64, data_length=data_len)
 
     # 确定是否使用gpu和一些其他的超参数
-    is_use_gpu = True
+    is_use_gpu = False
     print(device)
 
     if config["text_model"]["train"]:
@@ -114,10 +166,13 @@ if __name__ == "__main__":
                           image_model=ImageModel, optimizer=0, loss_func=loss_func_image)
 
     if config["multi_model"]["train"]:
-        multi_model = model.MultiModel(is_use_gpu)
+        multi_model = model.MultiModel(device, is_use_gpu)
         if is_use_gpu:
             multi_model = multi_model.to(device)
+        mul_optim = optim.Adam([param for param in multi_model.parameters()], lr=1e-5)
         loss_func_multi = nn.CrossEntropyLoss()
+        train_multi_model(train_loader=res_data["train"], val_loader=res_data["val"],
+                          mul_model=multi_model, optimizer=mul_optim, loss_func=loss_func_multi)
 
 
 
