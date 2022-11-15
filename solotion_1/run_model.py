@@ -27,13 +27,11 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
             optimizer.zero_grad()
             text = pre_data.text2id(row)
             out = text_model(text)
-            out = out.to(cpu)
-            # print(out.shape)
+            out = out.to(cpu, dtype=torch.float)
             text_label = train_loader["text_label"][train_index]
             train_index += 1
             y = pre_data.label2features(text_label)
             y = y.squeeze(1)
-            # print(y.shape)
             loss = loss_func(out, y)
             loss.backward()
             optimizer.step()
@@ -49,7 +47,7 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
             val_size += batch_size
             text = pre_data.text2id(row)
             out = text_model(text)
-            out = out.to(cpu)
+            out = out.to(cpu, dtype=torch.float)
             text_label = val_loader["text_label"][val_index]
             val_index += 1
             y = pre_data.label2features(text_label)
@@ -89,10 +87,10 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             batch_size = len(row)
             train_size += batch_size
             optimizer.zero_grad()
-            text = pre_data.text2id(row)
             image = train_loader["image"][train_index]
             image = torch.tensor([i.tolist() for i in image])
-            out = mul_model(text)
+            text = pre_data.text2id(row)
+            out = mul_model(text, image)
             out = out.to(cpu)
             text_label = train_loader["text_label"][train_index]
             image_label = train_loader["image_label"][train_index]
@@ -112,10 +110,10 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
         for row in tqdm(val_loader["text"]):
             batch_size = len(row)
             val_size += batch_size
-            text = pre_data.text2id(row)
             image = val_loader["image"][val_index]
             image = torch.tensor([i.tolist() for i in image])
-            out = mul_model(text)
+            text = pre_data.text2id(row)
+            out = mul_model(text, image)
             out = out.to(cpu)
             text_label, image_label = val_loader["text_label"][val_index], val_loader["image_label"][val_index]
             val_index += 1

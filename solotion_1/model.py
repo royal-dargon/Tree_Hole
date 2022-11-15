@@ -49,7 +49,6 @@ class Text2Features(nn.Module):
         else:
             context = x[0]
             mask = x[1]
-
         encoder, pooled = self.bert(context, attention_mask=mask, return_dict=False)
         # encoder = torch.squeeze(encoder[0], 0)
         out, _ = self.gru(encoder)      # (batch, len, hidden*2)
@@ -85,24 +84,43 @@ class Image2Features(nn.Module):
 
 
 class MultiModel(nn.Module):
-    def __init__(self, is_gpu=True):
+    def __init__(self, device, is_gpu):
         super(MultiModel, self).__init__()
-        self.is_gpu = is_gpu
-        self.bert = BertModel.from_pretrained("../pre_model/pretrained_berts/bert_cn")
+        self.bert = BertModel.from_pretrained("../pre_model/pretrained_berts/bert_en")  # 从存放的路径加载预训练模型
         for param in self.bert.parameters():
-            param.requires_grad = True
-        self.lstm = nn.LSTM(input_size=768, hidden_size=text_hidden_size,
+            param.requires_grad = True  # 让参数变成可更新
+        self.lstm = nn.LSTM(input_size=768, hidden_size=text_hidden_size, dropout=0.5,
                             batch_first=True, num_layers=2, bidirectional=True)
-        self.image_model = torchvision.models.resnet152(pretrained=True)
+        self.image_model = torchvision.models.resnet152(weights='ResNet152_Weights.DEFAULT')
 
         def save_output(module, inputs, output):
             self.buffer = output
         self.image_model.layer4.register_forward_hook(save_output)
 
-    def forward(self, x):
-        if self.use_gpu:
-            context = x[0].to(self.device)
-            mask = x[1].to(self.device)
+        self.linear_1 = nn.Linear(in_features=text_hidden_size * 2, out_features=3)
+        self.linear_2 = nn.Linear(in_features=2048 * 7 * 7, out_features=2048)
+        self.device = device
+        self.is_gpu = is_gpu
+
+    def forward(self, x_t, x_image):
+        if self.is_gpu:
+            contexts = x_t[0].to(self.device)
+            masks = x_t[1].to(self.device)
+            image = x_image.to(self.device)
         else:
-            context = x[0]
-            mask = x[1]
+            contexts = x_t[0]
+            masks = x_t[1]
+            image = x_image
+
+        encoder, pooled = self.bert(contexts, attention_mask=masks, return_dict=False)
+        out, (_, _) = self.lstm(encoder)                        # (batch_size, length, hidden_size * 2)
+        out = out[:, -1, :]                                     # 只是选择最后一个进行输出 (64, 2048)
+        _ = self.image_model(image)                             # (batch_size, 2048, 7, 7)
+        img = self.buffer
+        img = img.view(img.size(0), -1)        # tree dims to 1
+        img = self.linear_2(img)
+        out = (out + img) / 2
+        out = self.linear_1(out)
+        return out
+
+
