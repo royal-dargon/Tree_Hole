@@ -26,7 +26,7 @@ def write2hdf5(data):
     label_image = pre_data.label2features(label_image)
     label_group.create_dataset("text_label", data=np.array(label_text))
     label_group.create_dataset("image_label", data=np.array(label_image))
-    print(file["labels"]["text_label"][:])
+    file.close()
 
 
 def main():

@@ -4,6 +4,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 
 
 import model
@@ -25,13 +26,14 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
             batch_size = len(row)
             train_size += batch_size
             optimizer.zero_grad()
-            text = pre_data.text2id(row)
+            text = np.array(row)
+            text = torch.tensor(text)
             out = text_model(text)
             out = out.to(cpu, dtype=torch.float)
-            text_label = train_loader["text_label"][train_index]
+            y = train_loader["text_label"][train_index]
             train_index += 1
-            y = pre_data.label2features(text_label)
-            y = y.squeeze(1)
+            y = np.array(y)
+            y = torch.tensor(y)
             loss = loss_func(out, y)
             loss.backward()
             optimizer.step()
@@ -45,13 +47,15 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
         for row in tqdm(val_loader["text"]):
             batch_size = len(row)
             val_size += batch_size
-            text = pre_data.text2id(row)
+            text = np.array(row)
+            text = torch.tensor(text)
             out = text_model(text)
             out = out.to(cpu, dtype=torch.float)
-            text_label = val_loader["text_label"][val_index]
+            y = val_loader["text_label"][val_index]
             val_index += 1
-            y = pre_data.label2features(text_label)
-            y = y.squeeze(1)
+            y = np.array(y)
+            y = torch.tensor(y)
+            # y = y.squeeze(1)
             loss = loss_func(out, y)
             acc_num = compute_acc(out, y)
             losses += loss.item() * batch_size
@@ -89,14 +93,14 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             optimizer.zero_grad()
             image = train_loader["image"][train_index]
             image = torch.tensor([i.tolist() for i in image])
-            text = pre_data.text2id(row)
-            out = mul_model(text, image)
+            row = np.array(row)
+            row = torch.tensor(row)
+            out = mul_model(row, image)
             out = out.to(cpu)
-            text_label = train_loader["text_label"][train_index]
-            image_label = train_loader["image_label"][train_index]
+            y = train_loader["text_label"][train_index]
+            y = np.array(y)
+            y = torch.tensor(y)
             train_index += 1
-            y = pre_data.label2features(text_label)
-            y = y.squeeze(1)
             loss = loss_func(out, y)
             loss.backward()
             optimizer.step()
@@ -112,13 +116,14 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             val_size += batch_size
             image = val_loader["image"][val_index]
             image = torch.tensor([i.tolist() for i in image])
-            text = pre_data.text2id(row)
+            text = np.array(row)
+            text = torch.tensor(text)
             out = mul_model(text, image)
             out = out.to(cpu)
-            text_label, image_label = val_loader["text_label"][val_index], val_loader["image_label"][val_index]
+            y = val_loader["text_label"][val_index]
             val_index += 1
-            y = pre_data.label2features(text_label)
-            y = y.squeeze(1)
+            y = np.array(y)
+            y = torch.tensor(y)
             loss = loss_func(out, y)
             acc_num = compute_acc(out, y)
             losses += loss.item() * batch_size
@@ -134,11 +139,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
 
 if __name__ == "__main__":
     # 获取文件夹的源数据
-    data = pre_data.get_single()
-
-    # 划分数据
-    data_len = len(data["text"])
-    res_data = pre_data.divide_data(data, batch_size=64, data_length=data_len)
+    res_data = pre_data.load_data("../data/HDF5_DATA/data_single.hdf5", 32)
 
     # 确定是否使用gpu和一些其他的超参数
     is_use_gpu = False
