@@ -4,6 +4,7 @@ import os
 from PIL import Image
 from transformers import BertTokenizer
 import torch
+from torchvision import transforms
 
 
 bert_en_model = "../pre_model/pretrained_berts/bert_en"
@@ -13,6 +14,14 @@ label_name = ['neutral', 'negative', 'positive']
 
 
 def get_single():
+    """对于这个数据集，我们的选择是只选择两个模态相同结果的数据进行提取"""
+    process = transforms.Compose([
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225])
+    ])
     data_path = "../data/MVSA_Single/data"
     label_path = "../data/MVSA_Single/labelResultAll.txt"
     file_name = os.listdir(data_path)
@@ -39,6 +48,8 @@ def get_single():
         i += 1
     for name in file_name:
         index = name.split(".")[0]
+        if labels[index][0] != labels[index][1]:
+            continue
         if name.endswith("txt"):
             f = open(data_path + "/" + name, encoding='unicode_escape')
             lines = f.readlines()
@@ -49,6 +60,8 @@ def get_single():
             data_rows["text"].append(s)
         elif name.endswith("jpg"):
             i = Image.open(data_path + "/" + name)
+            i = process(i)
+            i = i.tolist()
             data_rows["image"].append(i)
         data_rows["text_labels"].append(labels[index][0])
         data_rows["image_labels"].append(labels[index][1])
@@ -130,8 +143,9 @@ def text2id(rows):
         input_id = tokenizer.encode(
             r,
             add_special_tokens=True,
-            max_length=100,
-            pad_to_max_length=True,
+            max_length=128,
+            padding='max_length',
+            truncation=True,
             return_tensors='pt'
         )
         mask = [1 if t != 0 else 0 for t in input_id[0, :].tolist()]
@@ -154,7 +168,7 @@ def label2features(labels):
         label_id[label_name.index(label)] = 1
         label_ids.append(label_id)
     label_ids = [item.tolist() for item in label_ids]
-    label_ids = torch.tensor(label_ids, dtype=torch.float)
+    # label_ids = torch.tensor(label_ids, dtype=torch.float)
     return label_ids
 
 
