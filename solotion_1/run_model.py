@@ -23,7 +23,7 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
         train_size, val_size = 0, 0
         losses = 0
         for row in tqdm(train_loader["text"]):
-            batch_size = len(row)
+            batch_size = len(row[0])
             train_size += batch_size
             optimizer.zero_grad()
             text = np.array(row)
@@ -45,7 +45,7 @@ def train_textmodel(train_loader, val_loader, text_model, optimizer, loss_func):
         losses = 0
         acc_nums = 0
         for row in tqdm(val_loader["text"]):
-            batch_size = len(row)
+            batch_size = len(row[0])
             val_size += batch_size
             text = np.array(row)
             text = torch.tensor(text)
@@ -88,7 +88,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
         train_size, val_size = 0, 0
         losses = 0
         for row in tqdm(train_loader["text"]):
-            batch_size = len(row)
+            batch_size = len(row[0])
             train_size += batch_size
             optimizer.zero_grad()
             image = train_loader["image"][train_index]
@@ -112,7 +112,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
         losses = 0
         acc_nums = 0
         for row in tqdm(val_loader["text"]):
-            batch_size = len(row)
+            batch_size = len(row[0])
             val_size += batch_size
             image = val_loader["image"][val_index]
             image = torch.tensor([i.tolist() for i in image])
