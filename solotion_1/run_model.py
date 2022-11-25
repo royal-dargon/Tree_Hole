@@ -97,7 +97,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             row = torch.tensor(row)
             out = mul_model(row, image)
             out = out.to(cpu)
-            y = train_loader["text_label"][train_index]
+            y = train_loader["multi_label"][train_index]
             y = np.array(y)
             y = torch.tensor(y)
             train_index += 1
@@ -120,7 +120,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             text = torch.tensor(text)
             out = mul_model(text, image)
             out = out.to(cpu)
-            y = val_loader["text_label"][val_index]
+            y = val_loader["multi_label"][val_index]
             val_index += 1
             y = np.array(y)
             y = torch.tensor(y)

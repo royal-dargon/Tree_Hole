@@ -17,15 +17,18 @@ tokenizer = BertTokenizer.from_pretrained(bert_en_model)
 
 def write2hdf5(data):
     """主要的结构是先是分为了三类数据的表"""
-    texts, images, label_text, label_image = data["text"], data["image"], data["text_labels"], data["image_labels"]
+    texts, images, label_text, label_image, label_multi = data["text"], data["image"], data["text_labels"], \
+                                                          data["image_labels"], data["multi_labels"]
     text_contents = pre_data.text2id(texts)
     text_group.create_dataset("text_id", data=text_contents[0].numpy())
     text_group.create_dataset("text_mask", data=text_contents[1].numpy())
     image_group.create_dataset("image", data=np.array(images))
     label_text = pre_data.label2features(label_text)
     label_image = pre_data.label2features(label_image)
+    label_multi = pre_data.label2features(label_multi)
     label_group.create_dataset("text_label", data=np.array(label_text))
     label_group.create_dataset("image_label", data=np.array(label_image))
+    label_group.create_dataset("multi_label", data=np.array(label_multi))
     file.close()
 
 
