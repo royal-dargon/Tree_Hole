@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
 import model
@@ -81,7 +82,8 @@ def train_image_model(train_loader, val_loader, image_model, optimizer, loss_fun
 
 def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func):
     """train the model about image and text """
-    train_losses, val_losses, acc = [], [], []
+    train_losses, val_losses = [], []
+    acc_nums, precision, recall, f1_ = [], [], [], []
     for epoch in tqdm(range(config["multi_model"]["epoch"]), desc="training the multi model ..."):
         start = time.time()
         train_index, val_index = 0, 0
@@ -110,7 +112,7 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
         print("the %d epoch train losses is %f, the time is %f s" % (epoch + 1, losses/train_size, end - start))
 
         losses = 0
-        acc_nums = 0
+        prob_all, label_all = [], []
         for row in tqdm(val_loader["text"]):
             batch_size = len(row[0])
             val_size += batch_size
@@ -120,18 +122,29 @@ def train_multi_model(train_loader, val_loader, mul_model, optimizer, loss_func)
             text = torch.tensor(text)
             out = mul_model(text, image)
             out = out.to(cpu)
+            prob = np.array(out)
             y = val_loader["multi_label"][val_index]
             val_index += 1
             y = np.array(y)
+            label = y
             y = torch.tensor(y)
             loss = loss_func(out, y)
-            acc_num = compute_acc(out, y)
             losses += loss.item() * batch_size
-            acc_nums += acc_num
+            # 求最大索引
+            prob_all.extend(np.argmax(prob, axis=1))
+            label_all.extend(np.argmax(label, axis=1))
         val_losses.append(losses / val_size)
-        acc.append(acc_nums / val_size)
-        print("the epoch %d val losses is %f the acc is %f%%" %
-              (epoch + 1, losses / val_size, acc_nums / val_size * 100))
+        ac = accuracy_score(label_all, prob_all)
+        pre = precision_score(label_all, prob_all)
+        re = recall_score(label_all, prob_all)
+        f1 = f1_score(label_all, prob_all)
+        acc_nums.append(ac)
+        precision.append(pre)
+        recall.append(re)
+        f1_.append(f1)
+        print("the epoch %d val losses is %.4f the acc is %.4f%% the precision is %.4f;the recall is %.4f, "
+              "the f1-score is %.4f" %
+              (epoch + 1, losses / val_size, ac * 100, pre, re, f1))
 
     # 保存模型
     torch.save(mul_model.state_dict(), './save/single/multi_model.pt')
