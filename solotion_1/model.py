@@ -1,12 +1,24 @@
 # the model about the work
+import math
+
 import torch
 import torch.nn as nn
 from transformers import BertModel
 from transformers import logging
 import torchvision
 
+max_length = 128
 text_hidden_size = 1024
-text_hidden_size_2 = 1024
+text_hidden_size_2 = 1024       # text model use
+
+# multi_model
+multi_text_hidden_size_1 = 128
+img_hidden_size = 2048
+img_hidden_size_1 = 512
+
+multi_size = multi_text_hidden_size_1 * 2
+hidden_size = 128
+
 
 logging.set_verbosity_warning()
 
@@ -83,6 +95,12 @@ class Image2Features(nn.Module):
         pass
 
 
+# hyper parameters
+multi_max_length = 128
+multi_text_hidden_size_lstm = 98
+multi_transform_size_1 = 196
+
+
 class MultiModel(nn.Module):
     def __init__(self, device, is_gpu):
         super(MultiModel, self).__init__()
@@ -97,8 +115,17 @@ class MultiModel(nn.Module):
             self.buffer = output
         self.image_model.layer4.register_forward_hook(save_output)
 
-        self.linear_1 = nn.Linear(in_features=text_hidden_size * 2, out_features=3)
-        self.linear_2 = nn.Linear(in_features=2048 * 7 * 7, out_features=2048)
+        # self.linear_2 = nn.Linear(in_features=2048 * 7 * 7, out_features=2048)
+        self.average = nn.AdaptiveAvgPool1d(1)
+        self.fusion_layer = nn.Transformer(d_model=2048, batch_first=True,
+                                           num_encoder_layers=1, num_decoder_layers=1)
+
+        self.reg_layer = nn.Sequential(
+            nn.Linear(in_features=2048, out_features=512),
+            nn.Linear(in_features=512, out_features=128),
+            nn.Linear(in_features=128, out_features=3),
+        )
+
         self.device = device
         self.is_gpu = is_gpu
 
@@ -115,12 +142,18 @@ class MultiModel(nn.Module):
         encoder, pooled = self.bert(contexts, attention_mask=masks, return_dict=False)
         out, (_, _) = self.lstm(encoder)                        # (batch_size, length, hidden_size * 2)
         out = out[:, -1, :]                                     # 只是选择最后一个进行输出 (64, 2048)
+        out = torch.unsqueeze(out, dim=1)
         _ = self.image_model(image)                             # (batch_size, 2048, 7, 7)
         img = self.buffer
-        img = img.view(img.size(0), -1)        # tree dims to 1
-        img = self.linear_2(img)
-        out = (out + img) / 2
-        out = self.linear_1(out)
+        img = img.view(img.size(0), 2048, -1)
+        img = self.average(img)
+        img = img.permute(0, 2, 1)
+        # img = img.view(img.size(0), -1)        # tree dims to 1
+        # img = self.linear_2(img)
+        # img = torch.unsqueeze(img, dim=1)
+        out = self.fusion_layer(out, img)
+        out = torch.squeeze(out, dim=1)
+        out = self.reg_layer(out)
         return out
 
 
