@@ -1,23 +1,42 @@
 import os
+import random
 
-from torch.utils.data import Dataset
+import torch
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+from torchvision import transforms as T
+from transformers import BertTokenizer
+import numpy as np
 
 
 label_name = ['neutral', 'negative', 'positive']
+bert_en_model = "../pre_model/pretrained_berts/bert_en"
+tokenizer = BertTokenizer.from_pretrained(bert_en_model)
+
+
+process = T.Compose([
+    T.CenterCrop(224),
+    T.RandomHorizontalFlip(),
+    T.ToTensor(),
+    T.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225])
+])
 
 
 class MVSADataset(Dataset):
-    def __init__(self, data_dir, label_path, dataset='single'):
+    def __init__(self, data_dir, label_path, dataset='single', transform=None, mood="train"):
         self.data_dir = data_dir
         self.label_path = label_path
         self.dataset = dataset
+        self.transform = transform
         if dataset == 'single':
             pass
         else:
-            self.data_info = self.get_multi_data_info(data_dir, label_path)
+            self.data_info = self.get_multi_data_info(data_dir, label_path, mood)
 
     def __len__(self):
-        return len(self.data_info)
+        return len(self.data_info["texts_info"])
 
     def __getitem__(self, index):
         path_text, path_img, text_label, img_label, multi_label = self.data_info["texts_info"][index][0], \
@@ -25,13 +44,32 @@ class MVSADataset(Dataset):
                                                                   self.data_info["texts_info"][index][1], \
                                                                   self.data_info["images_info"][index][1], \
                                                                   self.data_info["labels"][index]
-        print(path_text, path_img, text_label, img_label, multi_label)
-        data, label = (path_text, path_img), (text_label, img_label, multi_label)
+        img = Image.open(path_img).convert('RGB')
+        if self.transform is not None:
+            img = self.transform(img)
+        f = open(path_text, encoding='unicode_escape')
+        lines = f.readlines()
+        s = ""
+        for line in lines:
+            line = line.strip("\n")
+            s += line
 
-        return data, label
+        input_id = tokenizer.encode(
+            s,
+            add_special_tokens=True,
+            max_length=128,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+        input_id = torch.squeeze(input_id)
+        mask = [1 if t != 0 else 0 for t in input_id[:].tolist()]
+        mask = torch.tensor(mask)
+        data = {"text_id": input_id, "text_mask": mask, "img": img, "label": multi_label}
+        return data
 
     @staticmethod
-    def get_multi_data_info(data_dir, label_path):
+    def get_multi_data_info(data_dir, label_path, mood):
         data_info = {
             "images_info": list(),
             "texts_info": list(),
@@ -108,12 +146,58 @@ class MVSADataset(Dataset):
             else:
                 positive += 1
         print(negative, neutral, positive, nums)
+
+        n = len(data_info["texts_info"])
+        index = [i for i in range(len(data_info["texts_info"]))]
+        np.random.shuffle(index)
+        data_info["texts_info"] = np.array(data_info["texts_info"])[index]
+        data_info["images_info"] = np.array(data_info["images_info"])[index]
+        data_info["labels"] = np.array(data_info["labels"])[index]
+        if mood == "valid":
+            data_info["texts_info"] = data_info["texts_info"][int(n * 0.9):]
+            data_info["images_info"] = data_info["images_info"][int(n * 0.9):]
+            data_info["labels"] = data_info["labels"][int(n * 0.9):]
+        elif mood == "train":
+            data_info["texts_info"] = data_info["texts_info"][:int(n * 0.7)]
+            data_info["images_info"] = data_info["images_info"][:int(n * 0.7)]
+            data_info["labels"] = data_info["labels"][:int(n * 0.7)]
+        else:
+            data_info["texts_info"] = data_info["texts_info"][int(n * 0.7):int(n * 0.9)]
+            data_info["images_info"] = data_info["images_info"][int(n * 0.7):int(n * 0.9)]
+            data_info["labels"] = data_info["labels"][int(n * 0.7):int(n * 0.9)]
         return data_info
 
 
-a = MVSADataset("../data/MVSA/data", "../data/MVSA/labelResultAll.txt", dataset='multi')
-m, n = a.__getitem__(100)
+def collate_fn(batch):
+    """
+    此函数的作用是定义如何取样本
+    """
+    MAX_LEN = 128
 
+    lens = [min(len(row["text_id"]), MAX_LEN) for row in batch]
+    batch_size, max_seq_len = len(batch), max(lens)
+    text_tensor = torch.zeros((batch_size, max_seq_len))
+    mask_tensor = torch.zeros((batch_size, max_seq_len))
+    image_tensor = torch.zeros((batch_size, 3, 224, 224))
+    label_tensor = torch.zeros((batch_size, 1))
+    for i_batch, (input_row, length) in enumerate(zip(batch, lens)):
+        text_tensor[i_batch] = input_row["text_id"]
+        mask_tensor[i_batch] = input_row["text_mask"]
+        image_tensor[i_batch] = input_row["img"]
+        label_tensor[i_batch] = input_row["label"]
+
+    return text_tensor, mask_tensor, image_tensor, label_tensor
+
+
+
+if __name__ == "__main__":
+    np.random.seed(111)
+    dataset = MVSADataset("../data/MVSA/data", "../data/MVSA/labelResultAll.txt", dataset='multi',
+                          transform=process, mood='valid')
+    data = DataLoader(dataset=dataset, batch_size=32, shuffle=True, collate_fn=collate_fn)
+    n = len(data)
+    for text_id, text_mask, image, label in data:
+        print(text_id.size(), text_mask.size(), image.size(), label.size())
 
 
 
